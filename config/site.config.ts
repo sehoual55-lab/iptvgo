@@ -18,9 +18,9 @@ export const siteConfig = {
   url: "https://iptvgo.store",
 
   contact: {
-    phone: "+33 7 56 75 73 87",
-    phoneRaw: "33756757387",
-    whatsapp: "33756757387",
+    phone: "+1 (661) 541-3954",
+    phoneRaw: "16615413954",
+    whatsapp: "16615413954",
     email: "support@iptvgo.store",
     whatsappDefaultMessage:
       "Hi IPTVGO! I'd like to know more about your subscriptions. Can you help me?",
