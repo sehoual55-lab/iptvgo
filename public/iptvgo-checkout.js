@@ -173,7 +173,7 @@
       '<div class="fs-ok" data-ok>'+
         '<div class="fs-check"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="'+LIME+'" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>'+
         '<h3>'+T.okTitle+'</h3><p>'+T.okBody+'</p>'+
-        '<a class="fs-wa" data-wa target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .1-1.7-.1-.4-.1-.9-.3-1.6-.6-2.8-1.2-4.6-4-4.7-4.2-.1-.2-1.1-1.5-1.1-2.8 0-1.3.7-2 .9-2.2.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5.2.5.7 1.8.8 1.9.1.1.1.3 0 .5s-.2.3-.3.5-.3.4-.1.7c.2.3.9 1.4 1.9 2.3 1.3 1.1 2.3 1.5 2.6 1.6.3.1.5.1.7-.1.2-.2.8-.9 1-1.2.2-.3.4-.2.7-.1.3.1 1.7.8 2 1 .3.1.5.2.5.3.1.2.1.7-.1 1.3Z"/></svg>'+T.wa+'</a>'+
+        '<a class="fs-wa" data-wa data-go-direct target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .1-1.7-.1-.4-.1-.9-.3-1.6-.6-2.8-1.2-4.6-4-4.7-4.2-.1-.2-1.1-1.5-1.1-2.8 0-1.3.7-2 .9-2.2.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5.2.5.7 1.8.8 1.9.1.1.1.3 0 .5s-.2.3-.3.5-.3.4-.1.7c.2.3.9 1.4 1.9 2.3 1.3 1.1 2.3 1.5 2.6 1.6.3.1.5.1.7-.1.2-.2.8-.9 1-1.2.2-.3.4-.2.7-.1.3.1 1.7.8 2 1 .3.1.5.2.5.3.1.2.1.7-.1 1.3Z"/></svg>'+T.wa+'</a>'+
         '<button class="fs-again" data-again>'+T.again+'</button>'+
       '</div>';
     overlay.appendChild(modal); document.body.appendChild(overlay);
@@ -243,12 +243,57 @@
     var waUrl="https://wa.me/"+CONFIG.WHATSAPP+"?text="+encodeURIComponent(msg);
     modal.querySelector("[data-wa]").setAttribute("href",waUrl);
 
-    var btn=modal.querySelector("[data-submit]"); btn.disabled=true; btn.textContent="…";
-    function done(){ try{window.open(waUrl,"_blank","noopener");}catch(_){}
-      modal.querySelector(".fs-body").style.display="none"; modal.querySelector("[data-ok]").classList.add("on");
-      btn.disabled=false; btn.textContent=T.submit; overlay.scrollTop=0; }
-    if(!CONFIG.ENDPOINT){ setTimeout(done,300); return; }
-    fetch(CONFIG.ENDPOINT,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)}).then(done).catch(done);
+    // 1) Log the order — fire-and-forget. This must NEVER block or delay the
+    //    WhatsApp redirect, otherwise the browser loses the user gesture and
+    //    silently blocks the popup (that was the "nothing happens" bug).
+    logOrder(payload);
+
+    // 2) Switch to the success panel.
+    modal.querySelector(".fs-body").style.display="none";
+    modal.querySelector("[data-ok]").classList.add("on");
+    overlay.scrollTop=0;
+
+    // 3) Open WhatsApp synchronously, still inside the click gesture.
+    goToWhatsApp(waUrl);
+  }
+
+  // Send the order to the Google Sheet endpoint without waiting for it.
+  function logOrder(payload){
+    if(!CONFIG.ENDPOINT) return;
+    var body=JSON.stringify(payload);
+    try{
+      if(navigator.sendBeacon){
+        var blob=new Blob([body],{type:"text/plain;charset=utf-8"});
+        if(navigator.sendBeacon(CONFIG.ENDPOINT,blob)) return;
+      }
+    }catch(_){}
+    try{
+      fetch(CONFIG.ENDPOINT,{method:"POST",mode:"no-cors",keepalive:true,
+        headers:{"Content-Type":"text/plain;charset=utf-8"},body:body}).catch(function(){});
+    }catch(_){}
+  }
+
+  // Must be called synchronously from a click handler, or popup blockers win.
+  function goToWhatsApp(url){
+    var win=null;
+    // NOTE: do NOT pass "noopener" as a window feature — with it the spec makes
+    // window.open() always return null, so success can't be detected. Open
+    // normally and detach the opener afterwards instead.
+    try{ win=window.open(url,"_blank"); }catch(_){}
+    if(win){ try{ win.opener=null; }catch(_){} return; }
+    // Popup blocked → synthetic anchor click (allowed during a user gesture).
+    // data-go-direct keeps the delegated wa.me handler from re-opening the modal.
+    try{
+      var a=document.createElement("a");
+      a.href=url; a.target="_blank"; a.rel="noopener noreferrer";
+      a.setAttribute("data-go-direct","");
+      a.style.display="none";
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ if(a.parentNode) a.parentNode.removeChild(a); },0);
+      return;
+    }catch(_){}
+    // Last resort (common on in-app browsers): navigate the current tab.
+    try{ window.location.href=url; }catch(_){}
   }
 
   // Detect the plan directly from the button's WhatsApp order message; fall back to card text.
@@ -266,6 +311,10 @@
   document.addEventListener("click",function(e){
     var a=e.target && e.target.closest ? e.target.closest('a[href*="wa.me"]') : null;
     if(!a) return;
+    // Links we generate ourselves (success panel, popup fallback) must go
+    // straight to WhatsApp instead of re-opening the checkout modal.
+    if(a.hasAttribute("data-go-direct")) return;
+    if(overlay && overlay.contains(a)) return;
     var key=planFromEl(a);
     if(!key || !CONFIG.PLANS[key]) return;   // generic contact buttons keep opening WhatsApp
     e.preventDefault(); e.stopImmediatePropagation();
