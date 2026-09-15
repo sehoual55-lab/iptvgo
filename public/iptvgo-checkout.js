@@ -296,14 +296,22 @@
     try{ window.location.href=url; }catch(_){}
   }
 
-  // Detect the plan directly from the button's WhatsApp order message; fall back to card text.
+  // Detect the plan from the button's own WhatsApp order message.
+  // The text fallback is deliberately scoped to the pricing section: the old
+  // version walked up 10 ancestors unconditionally, which reaches <body>, whose
+  // textContent contains every plan name (FAQ answers, blog excerpts). That made
+  // the floating button and every other contact link open the checkout modal with
+  // a randomly guessed plan instead of going to WhatsApp.
+  var PLAN_RE=/\b(Bronze|Gold|Platinum|Exclusive)\b/i;
+  var PRICING_SEL="#pricing,#packages,#plans,[data-pricing]";
   function planFromEl(a){
     var h=a.getAttribute("href")||""; try{ h=decodeURIComponent(h); }catch(e){}
-    var m=h.match(/\b(Bronze|Gold|Platinum|Exclusive)\b/i);
+    var m=h.match(PLAN_RE);
     if(m) return m[1].toLowerCase();
-    var node=a;
-    for(var i=0;i<10 && node;i++, node=node.parentElement){
-      var mm=(node.textContent||"").match(/\b(Bronze|Gold|Platinum|Exclusive)\b/i);
+    var scope=a.closest ? a.closest(PRICING_SEL) : null;
+    if(!scope) return null;            // generic contact link → straight to WhatsApp
+    for(var node=a,i=0; i<6 && node && node!==scope && node!==document.body; i++, node=node.parentElement){
+      var mm=(node.textContent||"").match(PLAN_RE);
       if(mm) return mm[1].toLowerCase();
     }
     return null;
