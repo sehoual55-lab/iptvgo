@@ -31,7 +31,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: langScript }} />
       </head>
-      <body className="min-h-screen font-sans">{children}<Script src="/iptvgo-checkout.js" strategy="afterInteractive" /></body>
+      <body className="min-h-screen font-sans">
+        {/* WA-ORDER */}<Script src="/wa-order.js?v=2" strategy="beforeInteractive" />{children}<Script src="/iptvgo-checkout.js" strategy="afterInteractive" /></body>
     </html>
   );
 }
